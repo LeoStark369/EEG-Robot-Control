@@ -1,0 +1,96 @@
+================================================================
+ BCI ROBOT CONTROL SYSTEM - HOW IT WORKS
+ Developer: Leo Hawking
+================================================================
+
+OVERVIEW
+--------
+This system lets a person control a robot using their brain signals
+(EEG), captured through the BrainFlow library. It is NOT literal
+mind-reading like in movies. It works by detecting specific,
+trainable brain patterns called "Motor Imagery" — the brain
+activity that happens when a person imagines moving a body part,
+even without actually moving it.
+
+The system listens for three imagined actions:
+  - Imagining LEFT HAND movement   -> Robot turns LEFT
+  - Imagining RIGHT HAND movement  -> Robot turns RIGHT
+  - Imagining FEET movement        -> Robot moves FORWARD
+  - Relaxed / no clear signal      -> Robot STOPS (safety default)
+
+================================================================
+STEP-BY-STEP PIPELINE
+================================================================
+
+1) EEG SIGNAL ACQUISITION
+   - BrainFlow connects to an EEG headset (OpenBCI Cyton, Muse 2,
+     Ganglion, etc.) or a "synthetic" virtual board for testing
+     without hardware.
+   - Raw brainwave data streams in continuously from electrodes
+     placed on the scalp.
+
+2) SIGNAL PROCESSING (FeatureExtractor class)
+   - Raw EEG is noisy, so each signal window is cleaned using:
+       - Detrending (removes drift)
+       - Bandpass filtering (keeps useful 3-45 Hz range)
+   - The cleaned signal is broken into brainwave "bands":
+       - Theta (4-8 Hz)
+       - Mu (8-12 Hz)      <- most important for motor imagery
+       - Beta (13-30 Hz)   <- also important for motor imagery
+   - The average power in each band is calculated per electrode.
+     This turns raw brainwaves into a short list of numbers
+     (a "feature vector") that a machine learning model can use.
+
+3) CALIBRATION (the "easy for users" part)
+   - Every brain is different, so the system trains itself on the
+     specific user before use.
+   - A calibration wizard asks the user to imagine LEFT, RIGHT,
+     and FEET movement, one at a time, several times each.
+   - Each imagined action is labeled and recorded as training data.
+   - A Linear Discriminant Analysis (LDA) classifier — a simple,
+     fast machine learning model — learns to tell the three brain
+     patterns apart from this data.
+   - This takes a few minutes and requires no technical knowledge
+     from the user; they just follow on-screen prompts.
+
+4) LIVE CLASSIFICATION LOOP
+   - Once calibrated, the system continuously:
+       a. Grabs the latest ~2 seconds of EEG data
+       b. Extracts the same band-power features as during
+          calibration
+       c. Feeds them into the trained LDA classifier
+       d. Gets a predicted action + a confidence score
+   - If confidence is too low (the model isn't sure), the system
+     defaults to STOP for safety instead of guessing.
+
+5) ROBOT CONTROL (RobotInterface class)
+   - Each predicted action is mapped to a single-character command:
+       F = Forward, L = Left, R = Right, S = Stop
+   - This command is sent over a serial connection to the robot
+     (e.g. an Arduino running a motor-control sketch that listens
+     for these characters).
+   - The interface is intentionally simple and swappable — it can
+     be changed to send commands over WiFi, Bluetooth, or ROS
+     instead of serial with minimal changes.
+
+================================================================
+WHY THIS APPROACH IS REALISTIC
+================================================================
+- True "read anyone's thoughts instantly" BCI does not exist yet.
+- Motor imagery + machine learning classification is the real,
+  proven technique used in BCI research and consumer neurotech.
+- Typical real-world accuracy for 2-3 mental commands is around
+  70-85% with a trained, cooperative user — comparable to
+  predictive text, not mind-reading.
+- Building in a low-confidence STOP fallback is a basic but
+  important safety measure for any physical robot controlled this
+  way.
+
+================================================================
+FILES
+================================================================
+- bci_robot_control.py   -> Full working Python implementation
+- bci_robot_control_explained.txt -> This explanation file
+
+Developer: Leo Hawking
+================================================================
